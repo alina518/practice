@@ -1,0 +1,30 @@
+!pip install english-words
+from english_words import get_english_words_set
+web2flowerset=get_english_words_set(['web2'],lower=True)
+import re
+import gradio as gr
+
+def hacker(message):
+  # message=input('Enter the message you want to hack: ')
+  for key in range(26):
+    decrypted=''
+    for ch in message.strip().upper():
+      if 'A'<=ch<='Z':
+        decrypted+=chr(((ord(ch)-ord('A')-key)%26)+ord('A'))
+      else:
+        decrypted+=ch
+    words=re.findall(r'[A-Z]+',decrypted)
+    hits=sum(1 for w in words if w.lower() in web2flowerset)
+    print(f"Key {key}: {decrypted} Hits: {hits}")
+    if hits>=5:
+      # print(f'Likely key found: {key}')
+      # print(f'Likely message: {decrypted}')
+      return key,decrypted
+      break
+with gr.Blocks(title='Caesar Hacker') as demo:
+  gr.Markdown('Caesar Hacker')
+  caesar_input=gr.Textbox(label='Encrypted Message')
+  caesar_key=gr.Textbox(label='Key')
+  caesar_output=gr.Textbox(label='Decrypted Message')
+  gr.Button('Decrypt').click(hacker, inputs=caesar_input,outputs=[caesar_key,caesar_output])
+demo.launch()
