@@ -1,0 +1,43 @@
+import random
+from english_words import get_english_words_set
+web2flowerset=get_english_words_set(['web2'],lower=True)
+def play():
+  word=random.choice(list(web2flowerset))
+  guessed=set()
+  wrong=set()
+  # print(word)
+  lives=4
+  for i in word:
+    print('_',end=' ')
+  while True:
+    user=input('\nEnter a letter: ')
+    if len(user)!=1 or not user.isalpha():
+      print('Please enter one alphabet letter only.')
+      continue
+    if user in guessed or user in wrong:
+      print('You\'ve already guessed this letter.')
+      continue
+    if user in word:
+      guessed.add(user)
+    else:
+      wrong.add(user)
+      lives-=1
+    display=''
+    for i in word:
+      if i in guessed:
+        display+=i+' '
+      else:
+        display+='_ '
+    print(display)
+    # print(lives)
+    if all(ch in guessed for ch in word):
+      print('Congratulations! You have guessed the word!')
+      break
+    elif lives==0:
+      print(f'Sorry! You\'re out of lives. The word was {word}.')
+      break
+while True:
+  play()
+  ch=input('Do you want to play again? y/n: ')
+  if ch!='y':
+      break
