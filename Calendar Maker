@@ -1,0 +1,33 @@
+import datetime
+# days=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
+months=['January','February','March','April','May','June','July','August','September','October','November','December']
+
+def calendarYear(year,month):
+  calString=''
+  calString+=(' '*34)+months[month-1]+' '+str(year)+'\n'
+  calString+='   Sunday     Monday    Tuesday    Wednesday   Thursday   Friday   Saturday \n'
+  weekSeparator = ('+----------' * 7) + '+\n'
+  blankRow = ('|          ' * 7) + '|\n'
+  currentDate=datetime.date(year,month,1)
+  while currentDate.weekday()!=6:
+    currentDate-=datetime.timedelta(days=1)
+  while True:
+    calString+=weekSeparator
+    dayrows=''
+    for i in range(7):
+      daynumLabel=str(currentDate.day).rjust(2)
+      dayrows+='|'+daynumLabel+(' '*8)
+      currentDate+=datetime.timedelta(days=1)
+
+    dayrows+='|\n'
+    calString+=dayrows
+    for i in range(3):
+      calString+=blankRow
+    if currentDate.month!=month:
+      break
+  calString+=weekSeparator
+  return calString
+year = int(input('Enter the year: '))
+month = int(input('Enter the month, 1-12: '))
+calString = calendarYear(year,month)
+print(calString)
