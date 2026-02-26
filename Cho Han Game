@@ -1,0 +1,48 @@
+import random
+import sys
+japanese_nums= {1: 'ICHI', 2: 'NI', 3: 'SAN', 4: 'SHI', 5: 'GO', 6: 'ROKU'}
+print('This is a digital version of Cho Han, a traditional Japanese game, where two dice are rolled by the dealer.\nThe player guesses whether the rolled dice is Cho(even) or Han(odd)')
+purse=5000
+while True:
+  bet=input(f'You have {purse} mon, how much do you want to bet? or (QUIT)').lower()
+
+  if bet=='quit':
+    print('Thank You')
+    break
+  elif not bet.isdigit(): # Check if input is a digit before converting to int
+    print('Enter a number: ')
+    continue
+  elif int(bet)>purse:
+    print('You do not have enough to make that bet.')
+  else:
+    bet=int(bet)
+    break
+
+dice1=random.randint(1,6)
+dice2=random.randint(1,6)
+
+dice=dice1+dice2
+print(dice)
+while True:
+  user=input('Enter whether CHO(even) or HAN(odd): ').upper() # Convert user input to upper for consistent comparison
+  if user!='CHO' and user!='HAN':
+      print('Enter either CHO or HAN')
+      continue
+  else:
+      break
+print(f'The numbers are {dice1}--{dice2}')
+print(f'{japanese_nums[dice1]}--{japanese_nums[dice2]}')
+if user=='CHO' and dice%2==0 or user=='HAN' and dice%2!=0:
+    print(f'You won, you take {bet} mon!')
+    purse=purse+bet
+    print(f'The house collects {bet//10} mon fee.')
+    purse=purse-(bet//10)
+
+else:
+    print(f'You lose!')
+    purse=purse-bet
+
+if purse==0:
+    print('You\'ve run out of money!')
+    print('Thanks for playing!')
+    sys.exit()
