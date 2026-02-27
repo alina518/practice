@@ -1,0 +1,13 @@
+print('COLLATZ PROBLEM\n1. If n is even, the next number n is n / 2.\n2. If n is odd, the next number n is n * 3 + 1.\n3. If n is 1, stop. Otherwise, repeat.\n\n')
+n=int(input('Enter a starting number: '))
+num_list=[]
+while n!=1:
+  num_list.append(n)
+  if n%2==0:
+      next_n=n//2
+      n=next_n
+      
+  elif n%2!=0:
+      next_n=n*3+1
+      n=next_n
+print(num_list)
