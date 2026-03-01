@@ -1,0 +1,388 @@
+import random
+import time
+import gradio as gr
+
+# =========================
+# Constants
+# =========================
+QUIZ_DURATION_DEFAULT = 30
+REWARD = 4
+PENALTY = 1
+
+DIFFICULTY_CONFIG = {
+    "Easy":   {"quiz_duration": 45, "min_dice": 2, "max_dice": 4},
+    "Medium": {"quiz_duration": 30, "min_dice": 2, "max_dice": 6},
+    "Hard":   {"quiz_duration": 20, "min_dice": 4, "max_dice": 8},
+}
+
+# =========================
+# Dice Pip Layouts (for HTML dice cards)
+# positions are 1..9 in a 3x3 grid:
+# 1 2 3
+# 4 5 6
+# 7 8 9
+# =========================
+PIP_MAP = {
+    1: [5],
+    2: [1, 9],
+    3: [1, 5, 9],
+    4: [1, 3, 7, 9],
+    5: [1, 3, 5, 7, 9],
+    6: [1, 3, 4, 6, 7, 9],  # standard vertical columns
+}
+
+# =========================
+# Helpers
+# =========================
+def compute_score(correct, wrong):
+    return (correct * REWARD) - (wrong * PENALTY)
+
+
+def get_time_left(state):
+    if not state or not state.get("started", False):
+        return 0
+    elapsed = time.time() - state["start_time"]
+    return max(0, state["quiz_duration"] - int(elapsed))
+
+
+def end_game_if_needed(state):
+    if not state or not state.get("started", False):
+        return state, False
+    if state.get("game_over", False):
+        return state, True
+
+    if get_time_left(state) <= 0:
+        state["game_over"] = True
+        final_score = compute_score(state["correct"], state["wrong"])
+        if final_score > state.get("best_score", 0):
+            state["best_score"] = final_score
+        return state, True
+
+    return state, False
+
+
+def build_timer_html(state):
+    if not state or not state.get("started", False):
+        return """
+        <div style="padding:10px 12px;border:1px solid #ddd;border-radius:12px;font-weight:600;">
+          ⏳ Time Left: -- s
+        </div>
+        """
+    t = get_time_left(state)
+    return f"""
+    <div style="padding:10px 12px;border:1px solid #ddd;border-radius:12px;font-weight:600;">
+      ⏳ Time Left: {t} s
+    </div>
+    """
+
+
+def build_score_html(state):
+    if not state or not state.get("started", False):
+        return """
+        <div style="padding:12px;border:1px solid #ddd;border-radius:12px;line-height:1.8;">
+          <b>✅ Correct:</b> 0<br>
+          <b>❌ Wrong:</b> 0<br>
+          <b>🏆 Score:</b> 0<br>
+          <b>🌟 Best (Session):</b> 0
+        </div>
+        """
+    score = compute_score(state["correct"], state["wrong"])
+    best = state.get("best_score", 0)
+    return f"""
+    <div style="padding:12px;border:1px solid #ddd;border-radius:12px;line-height:1.8;">
+      <b>✅ Correct:</b> {state['correct']}<br>
+      <b>❌ Wrong:</b> {state['wrong']}<br>
+      <b>🏆 Score:</b> {score}<br>
+      <b>🌟 Best (Session):</b> {best}
+    </div>
+    """
+
+
+def die_value_to_html(v):
+    """Single die card HTML (3x3 pip grid)."""
+    pips = set(PIP_MAP[v])
+    cells = []
+    for pos in range(1, 10):
+        dot = "●" if pos in pips else "&nbsp;"
+        cells.append(f'<div class="pip-cell">{dot}</div>')
+    return f"""
+    <div class="die-card" title="Die = {v}">
+      <div class="die-grid">
+        {''.join(cells)}
+      </div>
+    </div>
+    """
+
+
+def render_dice_cards_html(dice_values):
+    cards = "".join(die_value_to_html(v) for v in dice_values)
+    return f"""
+    <div class="dice-wrap">
+      {cards}
+    </div>
+    """
+
+
+def generate_round(min_dice, max_dice):
+    """
+    Generates one round of dice values and returns:
+    - dice_values (for actual dice cards)
+    - sum_ans
+    """
+    die_num = random.randint(min_dice, max_dice)
+    dice_values = [random.randint(1, 6) for _ in range(die_num)]
+    sum_ans = sum(dice_values)
+    return dice_values, sum_ans
+
+
+# =========================
+# UI Actions
+# =========================
+def start_game(difficulty, state):
+    cfg = DIFFICULTY_CONFIG[difficulty]
+    prev_best = 0
+    if state and isinstance(state, dict):
+        prev_best = state.get("best_score", 0)
+
+    dice_values, sum_ans = generate_round(cfg["min_dice"], cfg["max_dice"])
+
+    new_state = {
+        "started": True,
+        "game_over": False,
+        "start_time": time.time(),
+        "quiz_duration": cfg["quiz_duration"],
+        "min_dice": cfg["min_dice"],
+        "max_dice": cfg["max_dice"],
+        "difficulty": difficulty,
+        "current_sum": sum_ans,
+        "current_dice": dice_values,
+        "correct": 0,
+        "wrong": 0,
+        "best_score": prev_best,
+    }
+
+    return (
+        render_dice_cards_html(dice_values),
+        build_timer_html(new_state),
+        build_score_html(new_state),
+        "🎮 Game started! Count the pips and press Submit.",
+        new_state,
+        gr.update(value="", interactive=True),
+        gr.update(interactive=True),   # submit button
+    )
+
+
+def submit_answer(answer, state):
+    """
+    Checks answer and automatically moves to next round (if time remains).
+    """
+    if not state or not state.get("started", False):
+        return (
+            gr.update(),
+            gr.update(),
+            build_score_html(state or {}),
+            "⚠️ Click <b>Start / Restart Game</b> first.",
+            state,
+            gr.update(interactive=False),
+            gr.update(),
+        )
+
+    state, ended = end_game_if_needed(state)
+    if ended:
+        final_score = compute_score(state["correct"], state["wrong"])
+        return (
+            gr.update(),
+            build_timer_html(state),
+            build_score_html(state),
+            f"⏰ <b>Time's up!</b> Final Score: <b>{final_score}</b>",
+            state,
+            gr.update(interactive=False),
+            gr.update(value=""),
+        )
+
+    text = (answer or "").strip()
+    if text.isdecimal() and int(text) == state["current_sum"]:
+        state["correct"] += 1
+        feedback = "✅ Correct!"
+    else:
+        state["wrong"] += 1
+        feedback = f"❌ Incorrect. Correct answer was <b>{state['current_sum']}</b>."
+
+    current_score = compute_score(state["correct"], state["wrong"])
+    if current_score > state.get("best_score", 0):
+        state["best_score"] = current_score
+
+    # Auto-next-round immediately after checking answer (if time remains)
+    state, ended = end_game_if_needed(state)
+    if ended:
+        final_score = compute_score(state["correct"], state["wrong"])
+        return (
+            gr.update(),
+            build_timer_html(state),
+            build_score_html(state),
+            f"{feedback} ⏰ <b>Time's up!</b> Final Score: <b>{final_score}</b>",
+            state,
+            gr.update(interactive=False),
+            gr.update(value=""),
+        )
+
+    # Generate next round automatically
+    dice_values, sum_ans = generate_round(state["min_dice"], state["max_dice"])
+    state["current_dice"] = dice_values
+    state["current_sum"] = sum_ans
+
+    return (
+        render_dice_cards_html(dice_values),
+        build_timer_html(state),
+        build_score_html(state),
+        f"{feedback} 🎲 Next round loaded!",
+        state,
+        gr.update(interactive=True),
+        gr.update(value=""),  # clear input
+    )
+
+
+def tick_timer_only(state):
+    """
+    Updates ONLY the timer HTML to avoid flicker.
+    Does not touch score/message/buttons.
+    """
+    if not state or not state.get("started", False):
+        return build_timer_html({"started": False})
+
+    # If game is already over, keep showing 0s timer without re-rendering other UI
+    if state.get("game_over", False):
+        return build_timer_html(state)
+
+    # Compute time left directly (no state mutation here)
+    elapsed = time.time() - state["start_time"]
+    time_left = max(0, state["quiz_duration"] - int(elapsed))
+
+    # Just timer output
+    return f"""
+    <div style="padding:10px 12px;border:1px solid #ddd;border-radius:12px;font-weight:600;">
+      ⏳ Time Left: {time_left} s
+    </div>
+    """
+
+
+# =========================
+# UI
+# =========================
+custom_css = """
+.dice-wrap{
+  display:flex;
+  flex-wrap:wrap;
+  gap:12px;
+  align-items:center;
+  padding:8px 4px;
+}
+
+.die-card{
+  width:78px;
+  height:78px;
+  background:white;
+  border:2px solid #d9d9d9;
+  border-radius:16px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
+.die-grid{
+  width:60px;
+  height:60px;
+  display:grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  place-items:center;
+}
+
+.pip-cell{
+  width:18px;
+  height:18px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:18px;
+  line-height:1;
+  color:#111;
+  font-weight:700;
+}
+
+#dice_container {
+  min-height: 120px;
+  border:1px solid #e5e5e5;
+  border-radius:14px;
+  padding:10px;
+  background: #fafafa;
+}
+"""
+
+with gr.Blocks(theme=gr.themes.Soft(), css=custom_css, title="Dice Math Trainer") as demo:
+    gr.Markdown("""
+# 🎲 Dice Math Trainer (UI Version)
+Count the pips on the dice cards and enter the total before time runs out.
+
+**Scoring:** +4 correct / -1 incorrect
+""")
+
+    state = gr.State({"started": False, "game_over": False, "best_score": 0})
+
+    with gr.Row():
+        with gr.Column(scale=3):
+            dice_display = gr.HTML(
+                "<div id='dice_container'>Press Start / Restart Game to begin.</div>",
+                elem_id="dice_container"
+            )
+            message = gr.HTML("Click <b>Start / Restart Game</b> to begin.")
+
+        with gr.Column(scale=2):
+            difficulty = gr.Dropdown(
+                choices=["Easy", "Medium", "Hard"],
+                value="Medium",
+                label="Difficulty"
+            )
+
+            timer_box = gr.HTML(build_timer_html({"started": False}))
+            score_box = gr.HTML(build_score_html({"started": False}))
+
+            answer_box = gr.Textbox(
+                label="Enter the sum",
+                placeholder="Type a number...",
+                lines=1
+            )
+
+            submit_btn = gr.Button("✅ Submit", variant="primary", interactive=False)
+            start_btn = gr.Button("▶️ Start / Restart Game")
+
+    # Timer (updates only timer area, not dice area)
+    timer = gr.Timer(1.0)
+    timer.tick(
+    fn=tick_timer_only,
+    inputs=[state],
+    outputs=[timer_box]
+)
+
+    # Start
+    start_btn.click(
+        fn=start_game,
+        inputs=[difficulty, state],
+        outputs=[dice_display, timer_box, score_box, message, state, answer_box, submit_btn]
+    )
+
+    # Submit -> check answer + auto next round
+    submit_btn.click(
+        fn=submit_answer,
+        inputs=[answer_box, state],
+        outputs=[dice_display, timer_box, score_box, message, state, submit_btn, answer_box]
+    )
+
+    answer_box.submit(
+        fn=submit_answer,
+        inputs=[answer_box, state],
+        outputs=[dice_display, timer_box, score_box, message, state, submit_btn, answer_box]
+    )
+
+demo.launch()
